@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Absensi - RSUD</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0a0a;
+      color: #fafafa;
+      gap: 1.5rem;
+      padding: 1rem;
+    }
+    .room-name {
+      font-size: 1.25rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .countdown {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #3b82f6;
+    }
+    .countdown.urgent {
+      color: #ef4444;
+    }
+    .countdown.urgent svg {
+      animation: pulse 1s infinite;
+    }
+    .qr-wrapper {
+      padding: 1.5rem;
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .token-code {
+      font-size: 0.75rem;
+      color: #a1a1aa;
+      font-family: monospace;
+    }
+    .hint {
+      font-size: 0.75rem;
+      color: #71717a;
+    }
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: #a1a1aa;
+    }
+    .spinner {
+      width: 2rem;
+      height: 2rem;
+      border: 3px solid #333;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      color: #ef4444;
+    }
+    .error a {
+      color: #3b82f6;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  </style>
+</head>
+<body>
+  <div id="room-name" class="room-name" style="display:none"></div>
+
+  <div id="countdown" class="countdown" style="display:none">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>
+    <span id="countdown-text"></span>
+  </div>
+
+  <div id="loading" class="loading">
+    <div class="spinner"></div>
+    <span>Memuat token QR...</span>
+  </div>
+
+  <div id="error" class="error" style="display:none">
+    <span id="error-message"></span>
+    <a id="retry-link">Coba lagi</a>
+  </div>
+
+  <div id="qr-wrapper" class="qr-wrapper" style="display:none">
+    <div id="qr-canvas"></div>
+  </div>
+
+  <div id="token-code" class="token-code" style="display:none"></div>
+  <div class="hint">QR berputar otomatis setiap <span id="rotation-seconds"></span> detik</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script>
+    const ROTATION_MS = parseInt('{{ROTATION_INTERVAL_MS}}') || 10000;
+    const REFILL_THRESHOLD = 5;
+    const BATCH_SIZE = parseInt('{{BATCH_SIZE}}') || 20;
+
+    document.getElementById('rotation-seconds').textContent = ROTATION_MS / 1000;
+
+    const roomName = '{{ROOM_NAME}}';
+    if (roomName) {
+      const el = document.getElementById('room-name');
+      el.textContent = roomName;
+      el.style.display = '';
+    }
+
+    let tokenQueue = [];
+    let currentIndex = 0;
+    let rotationTimer = null;
+    let countdownTimer = null;
+    let countdown = ROTATION_MS / 1000;
+    let isRefilling = false;
+
+    const loadingEl = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const errorMessageEl = document.getElementById('error-message');
+    const retryEl = document.getElementById('retry-link');
+    const countdownEl = document.getElementById('countdown');
+    const countdownTextEl = document.getElementById('countdown-text');
+    const qrWrapperEl = document.getElementById('qr-wrapper');
+    const qrCanvasEl = document.getElementById('qr-canvas');
+    const tokenCodeEl = document.getElementById('token-code');
+
+    function showLoading() {
+      loadingEl.style.display = '';
+      errorEl.style.display = 'none';
+      qrWrapperEl.style.display = 'none';
+      tokenCodeEl.style.display = 'none';
+      countdownEl.style.display = 'none';
+    }
+
+    function showError(msg) {
+      loadingEl.style.display = 'none';
+      errorEl.style.display = '';
+      errorMessageEl.textContent = msg;
+      qrWrapperEl.style.display = 'none';
+      tokenCodeEl.style.display = 'none';
+      countdownEl.style.display = 'none';
+    }
+
+    function showQR(code) {
+      loadingEl.style.display = 'none';
+      errorEl.style.display = 'none';
+      qrWrapperEl.style.display = '';
+      tokenCodeEl.style.display = '';
+      countdownEl.style.display = '';
+
+      qrCanvasEl.innerHTML = '';
+      const qr = qrcode(0, 'M');
+      qr.addData(code);
+      qr.make();
+
+      const img = document.createElement('img');
+      img.src = qr.createDataURL(8, 0);
+      img.style.width = '320px';
+      img.style.height = '320px';
+      img.style.imageRendering = 'pixelated';
+      qrCanvasEl.appendChild(img);
+
+      tokenCodeEl.textContent = code;
+    }
+
+    async function fetchActiveTokens() {
+      const res = await fetch('/api/qr/active');
+      if (!res.ok) throw new Error('Gagal mengambil token');
+      const data = await res.json();
+      return data.tokens;
+    }
+
+    async function generateBatch() {
+      const res = await fetch('/api/qr/generate-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: BATCH_SIZE }),
+      });
+      if (!res.ok) throw new Error('Gagal membuat batch token');
+      const data = await res.json();
+      return data.tokens;
+    }
+
+    async function refill() {
+      if (isRefilling) return;
+      isRefilling = true;
+      try {
+        const newTokens = await generateBatch();
+        tokenQueue = tokenQueue.concat(newTokens);
+      } catch (e) {
+        console.error('Refill failed:', e);
+      } finally {
+        isRefilling = false;
+      }
+    }
+
+    function rotateToken() {
+      if (currentIndex >= tokenQueue.length) {
+        stopRotation();
+        showLoading();
+        init().catch(() => showError('Gagal memuat token QR'));
+        return;
+      }
+
+      const token = tokenQueue[currentIndex];
+      if (!token) return;
+
+      const now = new Date();
+      const expiresAt = new Date(token.expiresAt);
+
+      if (now > expiresAt || token.usedAt) {
+        currentIndex++;
+        rotateToken();
+        return;
+      }
+
+      showQR(token.code);
+      currentIndex++;
+      countdown = ROTATION_MS / 1000;
+      updateCountdown();
+
+      const remaining = tokenQueue.length - currentIndex;
+      if (remaining <= REFILL_THRESHOLD) {
+        refill();
+      }
+    }
+
+    function updateCountdown() {
+      countdownTextEl.textContent = `QR berubah dalam ${countdown} detik`;
+      countdownEl.classList.toggle('urgent', countdown <= 5);
+    }
+
+    function startRotation() {
+      rotateToken();
+      countdown = ROTATION_MS / 1000;
+      updateCountdown();
+
+      rotationTimer = setInterval(() => {
+        rotateToken();
+      }, ROTATION_MS);
+
+      countdownTimer = setInterval(() => {
+        countdown = countdown > 1 ? countdown - 1 : ROTATION_MS / 1000;
+        updateCountdown();
+      }, 1000);
+    }
+
+    function stopRotation() {
+      if (rotationTimer) { clearInterval(rotationTimer); rotationTimer = null; }
+      if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    }
+
+    async function init() {
+      try {
+        showLoading();
+        let tokens = await fetchActiveTokens();
+        if (tokens.length === 0) {
+          tokens = await generateBatch();
+        }
+        tokenQueue = tokens;
+        currentIndex = 0;
+        startRotation();
+      } catch (e) {
+        console.error('Init failed:', e);
+        showError(e.message || 'Gagal memuat token QR');
+      }
+    }
+
+    retryEl.addEventListener('click', () => {
+      stopRotation();
+      tokenQueue = [];
+      currentIndex = 0;
+      init();
+    });
+
+    init();
+  </script>
+</body>
+</html>
