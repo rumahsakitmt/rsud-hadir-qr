@@ -3,8 +3,7 @@ module.exports = {
     {
       name: 'rsud-qr-server',
       script: 'src/index.ts',
-      interpreter: 'npx',
-      interpreter_args: 'tsx',
+      interpreter: 'bun',
       instances: 1,
       autorestart: true,
       watch: false,
