@@ -115,7 +115,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <script>
-    const ROTATION_MS = parseInt('{{ROTATION_INTERVAL_MS}}') || 10000;
+    const ROTATION_MS = parseInt('{{ROTATION_INTERVAL_MS}}') || 5000;
     const REFILL_THRESHOLD = 5;
     const BATCH_SIZE = parseInt('{{BATCH_SIZE}}') || 20;
 
@@ -129,6 +129,7 @@
     }
 
     let tokenQueue = [];
+    let nextBatch = [];
     let currentIndex = 0;
     let rotationTimer = null;
     let countdownTimer = null;
@@ -176,8 +177,8 @@
 
       const img = document.createElement('img');
       img.src = qr.createDataURL(8, 0);
-      img.style.width = '320px';
-      img.style.height = '320px';
+      img.style.width = '480px';
+      img.style.height = '480px';
       img.style.imageRendering = 'pixelated';
       qrCanvasEl.appendChild(img);
 
@@ -206,8 +207,7 @@
       if (isRefilling) return;
       isRefilling = true;
       try {
-        const newTokens = await generateBatch();
-        tokenQueue = tokenQueue.concat(newTokens);
+        nextBatch = await generateBatch();
       } catch (e) {
         console.error('Refill failed:', e);
       } finally {
@@ -217,10 +217,16 @@
 
     function rotateToken() {
       if (currentIndex >= tokenQueue.length) {
-        stopRotation();
-        showLoading();
-        init().catch(() => showError('Gagal memuat token QR'));
-        return;
+        if (nextBatch.length > 0) {
+          tokenQueue = nextBatch;
+          nextBatch = [];
+          currentIndex = 0;
+        } else {
+          stopRotation();
+          showLoading();
+          init().catch(() => showError('Gagal memuat token QR'));
+          return;
+        }
       }
 
       const token = tokenQueue[currentIndex];
@@ -241,7 +247,7 @@
       updateCountdown();
 
       const remaining = tokenQueue.length - currentIndex;
-      if (remaining <= REFILL_THRESHOLD) {
+      if (remaining <= REFILL_THRESHOLD && nextBatch.length === 0) {
         refill();
       }
     }
@@ -274,10 +280,12 @@
     async function init() {
       try {
         showLoading();
-        let tokens = await fetchActiveTokens();
-        if (tokens.length === 0) {
-          tokens = await generateBatch();
-        }
+        stopRotation();
+        tokenQueue = [];
+        nextBatch = [];
+        currentIndex = 0;
+
+        const tokens = await generateBatch();
         tokenQueue = tokens;
         currentIndex = 0;
         startRotation();
@@ -290,6 +298,7 @@
     retryEl.addEventListener('click', () => {
       stopRotation();
       tokenQueue = [];
+      nextBatch = [];
       currentIndex = 0;
       init();
     });
