@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const qrToken = pgTable("qr_token", {
   id: text("id").primaryKey(),
@@ -12,4 +12,15 @@ export const qrToken = pgTable("qr_token", {
   createdBy: text("created_by").notNull(),
 });
 
+export const attendance = pgTable("attendance", {
+  id: text("id").primaryKey(),
+  tokenId: text("token_id").notNull().references(() => qrToken.id),
+  userId: text("user_id").notNull(),
+  roomId: text("room_id"),
+  scannedAt: timestamp("scanned_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  uniqueIndex("attendance_user_token_idx").on(table.userId, table.tokenId),
+]);
+
 export type QrTokenType = typeof qrToken.$inferSelect;
+export type AttendanceType = typeof attendance.$inferSelect;

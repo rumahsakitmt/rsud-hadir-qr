@@ -24,7 +24,7 @@ function getHtml() {
   const raw = readFileSync(join(process.cwd(), "public", "index.html"), "utf-8");
 
   htmlCache = raw
-    .replace(/\{\{ROTATION_INTERVAL_MS\}\}/g, process.env.ROTATION_INTERVAL_MS || "10000")
+    .replace(/\{\{ROTATION_INTERVAL_MS\}\}/g, process.env.ROTATION_INTERVAL_MS || "5000")
     .replace(/\{\{BATCH_SIZE\}\}/g, process.env.BATCH_SIZE || "20")
     .replace(/\{\{ROOM_NAME\}\}/g, process.env.ROOM_NAME || "");
 
