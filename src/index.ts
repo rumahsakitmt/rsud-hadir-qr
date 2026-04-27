@@ -35,6 +35,7 @@ app.get("/", (c) => c.html(getHtml()));
 
 app.get("*", serveStatic({ root: "./public" }));
 
+const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT) || 3001;
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -63,6 +64,7 @@ async function cleanup() {
 
 setInterval(cleanup, CLEANUP_INTERVAL_MS);
 
-console.log(`QR Server running on http://localhost:${port}`);
+console.log(`QR Server running on http://${host === "0.0.0.0" ? "localhost" : host}:${port}`);
+console.log(`LAN access: http://<this-pc-ip>:${port}`);
 console.log(`Cleanup running every ${CLEANUP_INTERVAL_MS / 1000 / 60} minutes`);
-serve({ fetch: app.fetch, port });
+serve({ fetch: app.fetch, hostname: host, port });

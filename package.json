@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop rsud-qr-server",
+    "pm2:restart": "pm2 restart rsud-qr-server",
+    "pm2:logs": "pm2 logs rsud-qr-server",
+    "pm2:status": "pm2 status"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
